@@ -1,0 +1,81 @@
+# ===========================
+# Python
+# ===========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+**/venv/
+**/.venv/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.*
+
+# Python caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Machine Learning
+*.ckpt
+*.pt
+*.pth
+*.h5
+*.keras
+*.onnx
+*.pickle
+*.pkl
+*.joblib
+
+# Data files (uncomment if you don't want datasets on GitHub)
+# data/
+# datasets/
+# *.csv
+# *.parquet
+
+# Temporary files
+*.tmp
+*.temp
+
+# Bytecode
+*.so
+
+# Notebook outputs
+*.nbconvert.ipynb
+
+# OS files
+Thumbs.db
+
+# Large binaries
+*.dylib
+*.dll
+*.exe
