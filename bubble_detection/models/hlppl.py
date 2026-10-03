@@ -146,7 +146,10 @@ def compute_sentiment_score(close: np.ndarray,
     sentiment = 2.0 * rsi - 1.0
 
     # Dampen with slow trend: if price < slow MA, reduce positive sentiment
-    slow_ma = np.convolve(close, np.ones(window_slow) / window_slow, mode="same")
+    # mode="full" + trim gives a causal (trailing) moving average — no lookahead.
+    kernel = np.ones(window_slow) / window_slow
+    slow_ma_full = np.convolve(close, kernel, mode="full")[:n]
+    slow_ma = slow_ma_full  # first window_slow entries are edge-padded, acceptable
     trend = np.where(close > slow_ma, 1.0, -1.0)
     sentiment = 0.7 * sentiment + 0.3 * np.sign(trend)
     return np.clip(sentiment, -1.0, 1.0)

@@ -110,9 +110,10 @@ def extract_lppls_signals(close, train_end, n_windows=6, verbose=False):
                                   n_windows=n_windows, fitter_method="nm")
     indicators = model.rolling_confidence(log_price[:train_end], step=10)
 
-    conf_arr   = np.zeros(n)
-    tc_off_arr = np.full(n, 180.0)
-    m_arr      = np.full(n, 0.5)
+    # NaN = not yet computed; distinguish from legitimate 0.0 confidence
+    conf_arr   = np.full(n, np.nan)
+    tc_off_arr = np.full(n, np.nan)
+    m_arr      = np.full(n, np.nan)
 
     for ci in indicators:
         i = ci.date_idx
@@ -124,11 +125,15 @@ def extract_lppls_signals(close, train_end, n_windows=6, verbose=False):
         if not np.isnan(ci.mean_m):
             m_arr[i] = ci.mean_m
 
+    # Forward-fill only the uncomputed (NaN) inter-step days
     for i in range(1, n):
-        if conf_arr[i] == 0:
-            conf_arr[i]   = conf_arr[i-1]
-            tc_off_arr[i] = tc_off_arr[i-1]
-            m_arr[i]      = m_arr[i-1]
+        if np.isnan(conf_arr[i]):
+            conf_arr[i]   = conf_arr[i-1] if not np.isnan(conf_arr[i-1])   else 0.0
+            tc_off_arr[i] = tc_off_arr[i-1] if not np.isnan(tc_off_arr[i-1]) else 180.0
+            m_arr[i]      = m_arr[i-1]      if not np.isnan(m_arr[i-1])      else 0.5
+    conf_arr   = np.nan_to_num(conf_arr,   nan=0.0)
+    tc_off_arr = np.nan_to_num(tc_off_arr, nan=180.0)
+    m_arr      = np.nan_to_num(m_arr,      nan=0.5)
 
     if verbose:
         print(f"  LPPLS: {len(indicators)} windows  mean_conf={conf_arr[:train_end].mean():.3f}")
@@ -176,7 +181,7 @@ def extract_poly_lppls(close, seq_len=180, n_train_synth=6000, epochs=12, verbos
 
 def extract_hawkes(close, train_end, horizon=5, verbose=False):
     log_ret = np.diff(np.log(np.maximum(close, 1e-10)), prepend=0.0)
-    hp = HawkesProcess(threshold_sigma=1.5, n_restarts=8)
+    hp = HawkesProcess(threshold_sigma=2.0, n_restarts=8)
     hp.fit(log_ret[:train_end])
     if verbose:
         print(f"  {hp.summary()}")
@@ -189,7 +194,7 @@ def extract_hmm(close, volume, train_end, bubble_score, lppls_conf,
                             lppl_confidence=lppls_conf,
                             bubble_score=bubble_score)
     model = MarketHMM(n_states=n_states, crash_states=1,
-                      n_iter=150, random_state=42)
+                      n_iter=200, random_state=42)
     model.fit(X[:train_end])
     if verbose:
         print(f"  {model.summary()}")
@@ -227,9 +232,12 @@ def plot_results(close, dates, result, hawkes_prob, hmm_prob,
                 zorder=5, alpha=0.6, label="Crash label")
     shade(ax1)
     from matplotlib.patches import Patch
+    import matplotlib.lines as mlines
+    crash_handle = mlines.Line2D([], [], color="red", marker="o", linestyle="None",
+                                 markersize=4, alpha=0.6)
     ax1.legend(handles=[
         ax1.lines[0],
-        plt.scatter([], [], s=18, c="red", alpha=0.6),
+        crash_handle,
         Patch(color="blue",   alpha=0.3, label="Train"),
         Patch(color="orange", alpha=0.4, label="Val"),
         Patch(color="green",  alpha=0.4, label="Test"),
@@ -349,7 +357,7 @@ def run_pipeline(close, volume, dates, horizon=5, crash_threshold=0.05,
     # ── 5 model signals ───────────────────────────────────────
     print("\n[1/5] LPPLS confidence...")
     lppls_conf, tc_off_lppls, m_lppls = extract_lppls_signals(
-        close, train_end, n_windows=6, verbose=verbose)
+        close, train_end, n_windows=12, verbose=verbose)
 
     print("\n[2/5] HLPPL BubbleScore...")
     bubble_score = extract_bubble_score(
@@ -358,7 +366,7 @@ def run_pipeline(close, volume, dates, horizon=5, crash_threshold=0.05,
     print("\n[3/5] Poly-LPPLS-NN...")
     tc_off_nn, m_nn = extract_poly_lppls(
         close, seq_len=min(180, train_end // 3),
-        n_train_synth=6000, epochs=12, verbose=verbose)
+        n_train_synth=10000, epochs=20, verbose=verbose)
 
     tc_offset = 0.5 * tc_off_lppls + 0.5 * tc_off_nn
     m_blend   = 0.5 * m_lppls      + 0.5 * m_nn

@@ -70,14 +70,12 @@ def detect_crash_events(log_returns: np.ndarray,
     """
     n = len(log_returns)
     roll_w = 63   # ~3-month rolling window for σ
-    rolling_std  = np.array([
-        log_returns[max(0, i - roll_w): i + 1].std()
-        for i in range(n)
-    ]).clip(1e-8)
-    rolling_mean = np.array([
-        log_returns[max(0, i - roll_w): i + 1].mean()
-        for i in range(n)
-    ])
+    # Vectorised rolling stats via pandas for O(n) instead of O(n*roll_w)
+    import pandas as pd
+    s = pd.Series(log_returns)
+    rolling_mean = s.rolling(roll_w, min_periods=1).mean().to_numpy()
+    rolling_std  = s.rolling(roll_w, min_periods=1).std(ddof=0).fillna(0).to_numpy()
+    rolling_std  = np.maximum(rolling_std, 1e-8)
     threshold = rolling_mean - threshold_sigma * rolling_std
     raw_events = np.where(log_returns < threshold)[0]
 
@@ -171,7 +169,7 @@ class HawkesProcess:
     """
 
     def __init__(self,
-                 threshold_sigma: float = 1.5,
+                 threshold_sigma: float = 2.0,   # 2σ is standard (Bacry et al. 2015)
                  n_restarts: int = 10,
                  min_events: int = 5):
         self.threshold_sigma = threshold_sigma

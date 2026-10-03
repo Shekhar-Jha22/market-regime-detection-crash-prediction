@@ -71,11 +71,12 @@ def solve_linear_params_torch(t: torch.Tensor,
                      power * torch.cos(omega * log_dt),
                      power * torch.sin(omega * log_dt)], dim=1)  # [N,4]
 
-    # OLS: θ = (X'X)^{-1} X' y
-    XtX = X.T @ X                        # [4,4]
-    Xty = X.T @ log_price.unsqueeze(1)   # [4,1]
+    # OLS via lstsq — more numerically stable than solving normal equations directly
     try:
-        theta = torch.linalg.solve(XtX, Xty).squeeze()  # [4]
+        result = torch.linalg.lstsq(X, log_price.unsqueeze(1))
+        theta = result.solution.squeeze()   # [4]
+        if theta.shape[0] != 4:
+            theta = torch.zeros(4, device=t.device)
     except Exception:
         theta = torch.zeros(4, device=t.device)
     return theta[0], theta[1], theta[2], theta[3]
@@ -218,7 +219,7 @@ class PolyLPPLSNN(nn.Module):
     Input : normalised log-price series of fixed length (seq_len,)
     Output: (tc_offset, m, ω)
 
-    Architecture: 1D-CNN feature extractor → BiLSTM → MLP head
+    Architecture: 1D-CNN feature extractor → AdaptiveAvgPool → MLP head
     (deeper than M-LNN to generalise across series).
     """
 
@@ -284,17 +285,17 @@ class LPPLSSyntheticGenerator:
         self.tc_offset_range = tc_offset_range
         self.m_range = m_range
         self.omega_range = omega_range
-        self.noise_levels = noise_levels
-        np.random.seed(seed)
+        self.noise_levels = list(noise_levels)
+        self._rng = np.random.default_rng(seed)  # instance-level RNG, no global state mutation
 
     def _sample_params(self) -> Dict[str, float]:
-        tc_off = np.random.uniform(*self.tc_offset_range)
-        m      = np.random.uniform(*self.m_range)
-        omega  = np.random.uniform(*self.omega_range)
-        A      = np.random.uniform(4.0, 10.0)     # log price level
-        B      = np.random.uniform(-0.5, -0.05)   # negative for positive bubble
-        C1     = np.random.uniform(-0.1, 0.1)
-        C2     = np.random.uniform(-0.1, 0.1)
+        tc_off = self._rng.uniform(*self.tc_offset_range)
+        m      = self._rng.uniform(*self.m_range)
+        omega  = self._rng.uniform(*self.omega_range)
+        A      = self._rng.uniform(4.0, 10.0)
+        B      = self._rng.uniform(-0.5, -0.05)
+        C1     = self._rng.uniform(-0.1, 0.1)
+        C2     = self._rng.uniform(-0.1, 0.1)
         return {"tc_off": tc_off, "m": m, "omega": omega,
                 "A": A, "B": B, "C1": C1, "C2": C2}
 
@@ -311,12 +312,12 @@ class LPPLSSyntheticGenerator:
         for i in range(n_samples):
             p = self._sample_params()
             tc = self.seq_len + p["tc_off"]
-            noise_std = np.random.choice(self.noise_levels)
+            noise_std = self._rng.choice(self.noise_levels)
 
             from models.lppls_core import lppls_formula
             lp = lppls_formula(t, tc, p["m"], p["omega"],
                                p["A"], p["B"], p["C1"], p["C2"])
-            lp += np.random.normal(0, noise_std, self.seq_len)
+            lp += self._rng.normal(0, noise_std, self.seq_len)
             X[i] = lp.astype(np.float32)
             y[i] = [p["tc_off"], p["m"], p["omega"]]
 

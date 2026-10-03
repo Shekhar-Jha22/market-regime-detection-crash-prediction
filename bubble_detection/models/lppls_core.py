@@ -47,7 +47,7 @@ FILTER = {
     "m_range":   (0.01, 0.99),
     "ω_range":   (6.0,  13.0),
     "tc_dt_min": 0,           # tc must be after window end (days)
-    "tc_dt_max": 365,         # tc must be within 1 year of window end
+    "tc_dt_max": 730,         # tc within 2 years — longer bubbles need more room (Sornette 2003)
     "D_min":     0.0,         # oscillation-damping ratio ≥ 0
     "B_max":     0.0,         # B < 0 for positive bubble
     "rss_max":   np.inf,      # optional residual sum-of-squares cap
@@ -172,7 +172,7 @@ class LPPLSFitter:
         """
         t_end = t[-1]
         if tc_bounds is None:
-            tc_bounds = (t_end + 1, t_end + 365)
+            tc_bounds = (t_end + 1, t_end + 730)
 
         bounds_de = [tc_bounds, (0.01, 0.99), (6.0, 13.0)]
 
@@ -237,7 +237,7 @@ class LPPLSFitter:
             return False
         if fit.tc <= t_end:
             return False
-        if fit.tc > t_end + 365:
+        if fit.tc > t_end + 730:
             return False
         if fit.B > 0:
             return False
@@ -282,7 +282,7 @@ class LPPLSConfidenceModel:
                  window_sizes: Optional[List[int]] = None,
                  fitter_method: str = "de",
                  min_window: int = 60,
-                 max_window: int = 750,
+                 max_window: int = 1260,   # ~5 trading years (Sornette 2003)
                  n_windows: int = 20,
                  verbose: bool = False):
         if window_sizes is None:

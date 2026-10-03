@@ -1,6 +1,7 @@
-scipy
-matplotlib
-numpy
-pandas
-torch
-hmmlearn
+numpy>=1.24
+pandas>=2.0
+scipy>=1.11
+matplotlib>=3.7
+torch>=2.0
+hmmlearn>=0.3
+yfinance>=0.2
